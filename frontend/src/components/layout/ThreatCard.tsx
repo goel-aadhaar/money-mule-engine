@@ -17,7 +17,7 @@ export const ThreatCard = memo(({ ring, isSelected, onSelect, onGenerateSAR }: T
   
   // Light tint for the box background based on risk
   const bgTint = isCritical ? 'rgba(220, 38, 38, 0.08)' : isHigh ? 'rgba(245, 158, 11, 0.08)' : 'rgba(0, 168, 107, 0.08)';
-  const aiButtonBg = isCritical ? 'var(--danger-dim)' : isHigh ? 'var(--warning-dim)' : 'var(--accent-dim)';
+  // const aiButtonBg = isCritical ? 'var(--danger-dim)' : isHigh ? 'var(--warning-dim)' : 'var(--accent-dim)';
 
   return (
     <div style={{ marginBottom: '10px', position: 'relative', cursor: 'pointer' }}>
