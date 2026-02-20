@@ -340,6 +340,10 @@ async def submit_sar(req: SARSubmission):
     return {"message": "SAR Submitted to FinCEN", "reference_id": f"SAR-{int(time.time())}"}
 
 
+@app.get("/")
+async def root():
+    return {"message": "Money Mule Detection API is Running", "status": "healthy"}
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
