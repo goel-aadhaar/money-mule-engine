@@ -1,6 +1,7 @@
 import { X, Flag, CheckCircle, Wallet, Shield, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ToastType } from '../ui/Toast';
+import { API_BASE_URL } from '../../config';
 
 interface SidebarRightProps {
   node: any | null;
@@ -12,7 +13,7 @@ export function SidebarRight({ node, onClose, showToast }: SidebarRightProps) {
   const handleAction = async (action: 'false_positive' | 'escalated') => {
     if (!node) return;
     try {
-      const res = await fetch('http://localhost:8000/flag-account', {
+      const res = await fetch(`${API_BASE_URL}/flag-account`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

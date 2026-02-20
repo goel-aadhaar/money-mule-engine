@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, Download, X, Send, Fingerprint, AlertTriangle, ChevronRight } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { ToastType } from './ui/Toast';
+import { API_BASE_URL } from '../config';
 
 interface SARPanelProps {
   isOpen: boolean;
@@ -19,7 +20,7 @@ export function SARPanel({ isOpen, onClose, ringData, showToast }: SARPanelProps
   useEffect(() => {
     if (isOpen && ringData) {
       setLoading(true); setError(null); setReport(null);
-      fetch('https://money-mule-engine.onrender.com/generate-sar', {
+      fetch(`${API_BASE_URL}/generate-sar`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ringData),
       }).then(res => { if (!res.ok) throw new Error(); return res.json(); })
         .then(data => { setReport(data); setLoading(false); })
@@ -30,7 +31,7 @@ export function SARPanel({ isOpen, onClose, ringData, showToast }: SARPanelProps
   const handleSubmit = async () => {
     try {
       setLoading(true);
-      const res = await fetch('https://money-mule-engine.onrender.com/submit-sar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ring_id: ringData.ring_id, report_content: report }) });
+      const res = await fetch(`${API_BASE_URL}/submit-sar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ring_id: ringData.ring_id, report_content: report }) });
       if (res.ok) { showToast(`SAR for ${ringData.ring_id} submitted.`, 'success'); onClose(); } else throw new Error();
     } catch { showToast('Failed to submit SAR.', 'error'); setLoading(false); }
   };

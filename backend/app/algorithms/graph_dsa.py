@@ -10,7 +10,7 @@ def find_cycles_dfs(graph: igraph.Graph, min_len: int = 3, max_len: int = 5) -> 
     # Use a set of sorted tuples to avoid duplicate cycles (e.g., A-B-C vs B-C-A)
     seen_cycles = set()
     
-    # We only care about nodes that have both in > 0 and out <= 100
+    # We only care about nodes that have both in > 0 and out <= 100 (to avoid massive hubs)
     candidates = [v.index for v in graph.vs if 0 < v.degree(mode="out") <= 100 and v.degree(mode="in") > 0]
 
     
@@ -31,13 +31,11 @@ def find_cycles_dfs(graph: igraph.Graph, min_len: int = 3, max_len: int = 5) -> 
                     # Cycle found!
                     if min_len <= len(path) <= max_len:
                         # Normalize cycle to check for duplicates
+                        # A cycle is defined by its edges/nodes.
+                        # (A, B, C) is same as (B, C, A).
+                        # We use the canonical rotation (min element first).
+                        
                         cycle_indices = tuple(path)
-                        # We normalize by rotating the cycle so the smallest index is first - not perfect for string names but good for indices
-                        # Better: sort the components to identify the 'Ring Set' if order doesn't matter for the ID
-                        # But here order matters for the flow. 
-                        # To dedupe: create a canonical representation.
-                        # E.g. (A, B, C) is same ring as (B, C, A).
-                        # Find min index
                         min_i = min(cycle_indices)
                         min_pos = cycle_indices.index(min_i)
                         canonical = cycle_indices[min_pos:] + cycle_indices[:min_pos]
@@ -47,12 +45,14 @@ def find_cycles_dfs(graph: igraph.Graph, min_len: int = 3, max_len: int = 5) -> 
                             # Convert indices back to names
                             cycle_names = [graph.vs[i]["name"] for i in cycle_indices]
                             cycles.append({
-                                "type": "Cycle",
+                                "type": "cycle",
                                 "members": cycle_names,
                                 "metadata": {"length": len(path)}
                             })
+                            
                 elif neighbor not in path:
                     # Continue DFS
+                    # Optimization: Only push if length < max_len
                     if len(path) < max_len:
                         stack.append((neighbor, path + [neighbor]))
                         
@@ -62,80 +62,86 @@ def detect_shells(graph: igraph.Graph, min_hops: int = 3) -> List[Dict]:
     """
     Detects layered shell networks.
     Chain of 3+ hops where intermediate nodes have low degree (2-3).
+    Excludes nodes that are part of tight cycles (cliques).
+    Includes the 'Head' (Source) and 'Tail' (Destination) of the chain.
     """
-    # 1. Identify Shell Candidates: Total degree 2 or 3
-    # In a directed graph, a shell usually has 1 in and 1 out (degree 2), or maybe 1 in 2 out (degree 3).
-    shell_candidates_indices = [v.index for v in graph.vs if 2 <= v.degree() <= 3]
-    shell_candidates_set = set(shell_candidates_indices)
-    
     shells = []
-    seen_paths = set()
-
-    if not shell_candidates_indices:
-        return []
-
-    # We are looking for Source -> Shell -> Shell -> ... -> Destination
-    # The path must have length >= 3 (at least 2 intermediates?) 
-    # Prompt says: "chains of 3 or more hops where intermediate 'shell' accounts..."
-    # A->S1->S2->B (3 hops, 2 intermediates).
     
-    # We can induce a subgraph of shell candidates? 
-    # No, because Source and Dest might not be shells.
+    # 1. Identify Shell Candidates (Pass-through nodes acting as layers)
+    # Total degree 2 or 3, must have both in and out (flow-through)
+    shell_candidates_indices = [
+        v.index for v in graph.vs 
+        if 2 <= v.degree() <= 3 
+        and v.degree(mode="in") >= 1 
+        and v.degree(mode="out") >= 1
+    ]
     
-    # Pattern: Non-Shell (or Shell) -> Shell -> ... -> Shell -> Non-Shell (or Shell)
-    # Actually, the requirement is "intermediate 'shell' accounts".
-    # So we look for connected components of shell candidates?
-    
-    # Let's try finding paths through the shell subgraph.
-    # Construct a subgraph of ONLY shell candidates.
     if len(shell_candidates_indices) < 2:
         return []
 
-    # Get edges where BOTH source and target are in shell_candidates
-    # This detects the "Shell -> Shell" part of the chain.
-    # Then we expand outwards?
-    
-    # Alternative: DFS from any node, but strictly constrain that *next* node must be a shell, unless we are ending.
-    # This might be too expensive.
-    
-    # Better approach:
-    # 1. Subgraph of shells.
-    # 2. Find connected components or long paths in this subgraph.
-    # 3. If a path in shell-subgraph is length >= 1 (S1->S2), that's 2 shells.
-    # We need "chains of 3+ hops".
-    # Hop 1: X -> S1
-    # Hop 2: S1 -> S2
-    # Hop 3: S2 -> Y
-    # So we need at least 2 connected shell nodes to form a 3-hop chain (X->S1->S2->Y).
-    
-    # Let's build the subgraph of shells.
+    # 2. Build Subgraph of Shell Candidates (The intermediate layers)
     shell_graph = graph.subgraph(shell_candidates_indices)
     
-    # Find all simple paths in shell_graph? Or just connected components?
-    # Connected components (weak) give us clusters of shells.
-    # If a cluster has diameter >= 1, it can form a chain.
-    
+    # 3. Find Linear Components
     components = shell_graph.connected_components(mode="weak")
     
     for cluster in components:
-        # cluster is a list of vertex indices in shell_graph (0 to N_sub)
-        # map back to original indices
-        original_indices = [shell_candidates_indices[i] for i in cluster]
-        
-        if len(original_indices) >= 2:
-            # Check if they form a path
-            # We can treat this cluster as a potential shell network
-            # To be precise, let's include them. 
-            # The prompt asks to "Identify chains...". 
-            # Reporting the cluster of shells is a good approximation and robust.
+        # cluster = indices in shell_graph
+        if len(cluster) >= min_hops:
+            # Map back to original indices
+            original_indices = [shell_candidates_indices[i] for i in cluster]
             
-            # Refinement: Check distinct paths?
-            # For high performance, returning the connected component of shells is safest.
-            member_names = [graph.vs[i]["name"] for i in original_indices]
-            shells.append({
-                "type": "Layered Shell",
-                "members": member_names,
-                "metadata": {"size": len(member_names)}
-            })
+            # Check topology linearity
+            sub_g = graph.subgraph(original_indices)
+            n_nodes = sub_g.vcount()
+            n_edges = sub_g.ecount()
+            
+            # If strictly linear or near linear (allow small noise, e.g. < 1.2 edge ratio)
+            if n_edges < n_nodes * 1.2:
+                # Ordering the chain: Topological Sort on the subgraph
+                # If it's truly a shell chain, it should be a DAG (Directed Acyclic Graph)
+                try:
+                    # topo_sort returns indices in sub_g (0 to N-1)
+                    sorted_sub_indices = sub_g.topological_sorting()
+                    # Map sub-graph indices -> original graph indices
+                    sorted_original_indices = [original_indices[i] for i in sorted_sub_indices]
+                except igraph.InternalError:
+                    # Cycle detected in "linear" component -> fallback to just list or skip
+                    # If it has a cycle, it's not a pure shell chain.
+                    continue
+
+                # Identify HEAD (Source feeding the chain) and TAIL (Destination receiving from chain)
+                # Head: Predecessors of first shell node (not in shell)
+                # Tail: Successors of last shell node (not in shell)
+                
+                chain_start_idx = sorted_original_indices[0]
+                chain_end_idx = sorted_original_indices[-1]
+                
+                # Predecessors of start
+                preds = graph.predecessors(chain_start_idx)
+                # Successors of end
+                succs = graph.successors(chain_end_idx)
+                
+                # Filter out those already in the shell
+                heads = [p for p in preds if p not in original_indices]
+                tails = [s for s in succs if s not in original_indices]
+                
+                # Construct Member List: Heads + Shells + Tails
+                # Mapping indices to names
+                
+                head_names = [graph.vs[h]["name"] for h in heads]
+                tail_names = [graph.vs[t]["name"] for t in tails]
+                shell_names = [graph.vs[i]["name"] for i in sorted_original_indices]
+                
+                full_members = head_names + shell_names + tail_names
+                
+                # Deduplicate just in case? Usually logic ensures distinct sets.
+                # If Head/Tail same (Cycle), handled by Cycle Detector.
+                
+                shells.append({
+                    "type": "layered_shell",
+                    "members": list(dict.fromkeys(full_members)), # Preserve order, dedupe
+                    "metadata": {"size": len(full_members), "layers": len(shell_names)}
+                })
             
     return shells

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import * as THREE from 'three';
 import { ArrowDown, Shield, Database, Activity, FileText, Upload, AlertTriangle } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface LandingPageProps {
   onAnalysisComplete: (data: any) => void;
@@ -87,7 +88,7 @@ export function LandingPage({ onAnalysisComplete }: LandingPageProps) {
     setLoading(true); setError(null);
     try {
       const fd = new FormData(); fd.append('file', file);
-      const res = await fetch('https://money-mule-engine.onrender.com/analyze', { method: 'POST', body: fd });
+      const res = await fetch(`${API_BASE_URL}/analyze`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error('Analysis failed');
       const result = await res.json();
       onAnalysisComplete(result);
