@@ -15,4 +15,8 @@ export default defineConfig({
     },
   },
   envDir: '..',
+  server: {
+    host: true, // Listen on 0.0.0.0
+    port: 5173,
+  },
 })
